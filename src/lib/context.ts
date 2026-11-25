@@ -11,9 +11,11 @@ export async function getContext() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  await supabase.rpc("sb_ensure_workspace");
-  const { data: mems } = await supabase
+  const { error: rpcErr } = await supabase.rpc("sb_ensure_workspace");
+  if (rpcErr) throw new Error(`Database not ready: ${rpcErr.message}. Run the SalesBuzz SQL (supabase/migrations/0001_salesbuzz_schema.sql) in the same Supabase project this site is connected to.`);
+  const { data: mems, error: memErr } = await supabase
     .from("sb_workspace_members").select("workspace_id, role, sb_workspaces(id, name)").eq("user_id", user.id);
+  if (memErr) throw new Error(`Could not load your workspace: ${memErr.message}`);
   const memberships = (mems ?? []).map((m) => ({
     id: m.workspace_id as string, role: m.role as Role,
     name: ((m.sb_workspaces as unknown) as { name: string } | null)?.name ?? "Workspace",
@@ -23,12 +25,13 @@ export async function getContext() {
   const chosen = (await cookies()).get("sb_ws")?.value;
   const current = memberships.find((m) => m.id === chosen) ?? memberships[0];
 
-  const [{ data: workspace }, { data: memberRows }, { data: subs }] = await Promise.all([
+  const [{ data: workspace, error: wsErr }, { data: memberRows }, { data: subs }] = await Promise.all([
     supabase.from("sb_workspaces").select("id, name, ingest_key, preferences, scoring").eq("id", current.id).single(),
     supabase.from("sb_workspace_members").select("user_id, role, email").eq("workspace_id", current.id),
     supabase.from("sb_subscriptions").select("*").eq("user_id", user.id).eq("status", "active")
       .order("created_at", { ascending: false }),
   ]);
+  if (wsErr || !workspace) throw new Error(`Could not load workspace settings: ${wsErr?.message ?? "not found"}`);
   const ids = (memberRows ?? []).map((m) => m.user_id);
   const { data: profs } = await supabase.from("sb_profiles").select("id, full_name").in("id", ids);
   const members = (memberRows ?? []).map((m) => ({
