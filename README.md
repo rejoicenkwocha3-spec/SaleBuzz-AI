@@ -33,3 +33,7 @@ Local: `npm install && npm run dev`.
 - Rate limiting is in memory per server instance. Use a shared store (for example Upstash) for strict limits at scale.
 - Team invitations attach when the invited person signs up with the same email; no invitation email is sent.
 - Only one logo direction was built (the connected S mark), in `public/brand/`.
+
+## Troubleshooting
+
+Open `/api/health` on your deployed site to check Supabase URL, key type, and a live key test (no secrets are shown). The URL, anon key, and service role key must all come from the same Supabase project.
